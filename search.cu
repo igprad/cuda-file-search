@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
@@ -10,7 +11,32 @@
 
 namespace fs = std::filesystem;
 
-__global__ void search_target_file(char **paths, char *target_file_name) {}
+__device__ void validate_path_target(char *path, char *target, bool *result) {
+  // TODO: to be improved
+  int limit = 100;
+  for (int i = 0; i < limit; i++) {
+    if (path[i] != target[i]) {
+      *result = false;
+    }
+  }
+}
+
+// TODO: fix the implementation, still getting invalid result (might be an error
+// @_@)
+__global__ void search_target_file(char **paths, char *target_file_name) {
+  int idx = blockIdx.x;
+  char *current_path = paths[idx];
+  /*
+   * Notes: since this is device function, some package / library will be not
+   * recognize
+   * TODO: to be improved
+   */
+  bool found = true;
+  validate_path_target(current_path, target_file_name, &found);
+  if (found) {
+    printf("Found.\n");
+  }
+}
 
 int main(int argc, char **argv) {
   std::string search_target = argv[1];
@@ -40,25 +66,22 @@ int main(int argc, char **argv) {
                  });
   cpaths.push_back(nullptr);
   char **cpaths_ptr = cpaths.data();
+
   // Only for debug -> check paths in the vector
-  for (int i = 0; cpaths_ptr[i] != nullptr; i++) {
+  /*
+     for (int i = 0; cpaths_ptr[i] != nullptr; i++) {
     std::cout << cpaths_ptr[i] << std::endl;
   }
+  */
 
-  /*
-   * TODO: fix the transformation and device (global) func since in device
-   * std::string package was not available. So need to pass pointer of char
-   * pointer (char **) instead.
-   */
-  // Transform the vectors to device ready ptrs
-  /*std::string *device_paths =
-      (std::string *)malloc(sizeof(std::string) * path_size);
-  cudaMalloc(&device_paths, sizeof(std::string) * path_size);
-  cudaMemcpy(device_paths, paths, sizeof(std::string) * path_size,
-             cudaMemcpyHostToDevice);
-             */
+  // TODO: found a dynamic way to calculate the right size of cpaths_ptr
+  int path_size = 1000;
+  char **device_paths = (char **)malloc(path_size);
+  cudaMalloc(&device_paths, path_size);
+  cudaMemcpy(device_paths, cpaths_ptr, path_size, cudaMemcpyHostToDevice);
+  char *target = search_target.data();
+  search_target_file<<<1000, 1>>>(device_paths, target);
+  cudaDeviceSynchronize();
 
-  // Execute the device function to find the file, pass back to host for bool
-  // result (?)
   return 0;
 }
